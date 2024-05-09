@@ -65,7 +65,7 @@ func storeGetHandler(w http.ResponseWriter, r *http.Request) {
 	//Call store.Get method with key
 	value, err := Get(key)
 	if err != nil {
-		if errors.Is(err, NoSuchKeyError) {
+		if errors.Is(err, ErrorNoSuchKey) {
 			//If error is NoSuchKey set status 404 not found
 			http.Error(w, err.Error(), http.StatusNotFound)
 		} else {
@@ -93,39 +93,5 @@ func storeDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Delete Key: %v\n", key)
 	// Call store.Delete
 	Delete(key)
-
-}
-
-// ----Store operations (TODO: move to store.go)
-// Store will start as a simple map of string:string (Later --> struct with mutex )
-var store = make(map[string]string)
-
-// Define Custom error
-var NoSuchKeyError = errors.New("No Such Key")
-
-// Define Put function to add elements to store
-func Put(key, value string) error {
-
-	//Idempotent so no checks for already existing value with given key ( ALWAYS OVERWRITE)
-	store[key] = value
-
-	return nil
-}
-
-// Define Get function to retrieve element by key
-func Get(key string) (string, error) {
-	value, ok := store[key]
-
-	if !ok {
-		return "", NoSuchKeyError
-	}
-
-	return value, nil
-}
-
-// Define Delete function to delete element by key
-func Delete(key string) {
-
-	delete(store, key)
 
 }
