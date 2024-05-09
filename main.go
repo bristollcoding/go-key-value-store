@@ -9,8 +9,14 @@ import (
 )
 
 func main() {
+
 	//----Routing http REST----- (TODO: Move to RestApi.go)
 	routerMux := http.NewServeMux()
+	//Call to start with the last status on log file
+	err := initTransLogger()
+	if err != nil {
+		log.Fatal("error init transaction logger: ", err)
+	}
 
 	//Put http endpoint to call store.Put
 	routerMux.HandleFunc("PUT /api/v1/{key}", storePutHandler)

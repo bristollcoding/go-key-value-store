@@ -29,6 +29,8 @@ func Put(key, value string) error {
 	//Idempotent so no checks for already existing value with given key ( ALWAYS OVERWRITE)
 	store.m[key] = value
 
+	//Write transaction to log file
+	tLogger.WritePut(key, value)
 	return nil
 }
 
@@ -51,5 +53,7 @@ func Delete(key string) {
 	store.Lock()
 	defer store.Unlock()
 	delete(store.m, key)
+	//Write transaction to log file
+	tLogger.WriteDelete(key)
 
 }
