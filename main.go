@@ -57,7 +57,8 @@ func storePutHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
+	// Write transaction to log file
+	tLogger.WritePut(key, string(value))
 	//If nothing has failed return 201 created
 	w.WriteHeader(http.StatusCreated)
 }
@@ -99,5 +100,6 @@ func storeDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Printf("Delete Key: %v\n", key)
 	// Call store.Delete
 	Delete(key)
-
+	// Write transaction to log file
+	tLogger.WriteDelete(key)
 }

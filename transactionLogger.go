@@ -3,7 +3,9 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
+	"sync"
 )
 
 //Transaction logger allows store to get back to its previous state redoing every action until its last state
@@ -22,8 +24,8 @@ type TransactionLogger interface {
 type Event struct {
 	Sequence  uint64 //transaction id
 	EventType EventType
-	key       string
-	value     string
+	Key       string
+	Value     string
 }
 type EventType string
 
@@ -43,21 +45,27 @@ type FileTransactionLogger struct {
 	lastSequence uint64
 	//File location
 	file *os.File
+
+	wg *sync.WaitGroup
 }
 
-var tLogger TransactionLogger
+var tLogger *FileTransactionLogger
 
 // Create a FileTransactionLogger
-func NewFileTransactionLogger(filename string) (TransactionLogger, error) {
+func NewFileTransactionLogger(filename string) (*FileTransactionLogger, error) {
+	var err error
+	//Create Transaction Logger
+	tLog := FileTransactionLogger{wg: &sync.WaitGroup{}}
 
-	//Opens file in read/write mode, write always append and if not exists create file
-	file, err := os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755)
+	//Opens file in read/write mode and assign it to logger, write always append and if not exists create file
+	tLog.file, err = os.OpenFile(filename, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0755)
 
 	if err != nil {
+		fmt.Println("6")
 		return nil, fmt.Errorf("error opening transaction log file: %v with error: %w ", filename, err)
 	}
 
-	return &FileTransactionLogger{file: file}, nil
+	return &tLog, nil
 }
 
 // Function to recreate transactions from log file
@@ -69,6 +77,7 @@ func initTransLogger() error {
 	tLogger, err = NewFileTransactionLogger("transLog.log")
 
 	if err != nil {
+		fmt.Println("5")
 		return fmt.Errorf("error crating file transaction logger: %w", err)
 	}
 	eventsChan, errorsChan := tLogger.ReadTransLog()
@@ -85,14 +94,28 @@ func initTransLogger() error {
 		case e, ok = <-eventsChan:
 			switch e.EventType {
 			case EventDelete:
-				Delete(e.key)
+				fmt.Println("delete event")
+				Delete(e.Key)
 			case EventPut:
-				err = Put(e.key, e.value)
+				fmt.Println("put event")
+
+				err = Put(e.Key, e.Value)
 			}
 		}
-
+		fmt.Println("End reading from channels init")
+	}
+	tLogger.wg.Wait()
+	if tLogger.events != nil {
+		close(tLogger.events) // Terminates Run loop and goroutine
 	}
 	tLogger.Start()
+
+	//Get errors from error channel
+	go func() {
+		for err := range tLogger.Err() {
+			log.Print(err)
+		}
+	}()
 	return err
 }
 
@@ -112,13 +135,16 @@ func (l *FileTransactionLogger) Start() {
 			l.lastSequence++
 			//Transaction format in file-> [id TransactionType Key Value] each in new line
 			//TODO: handle values with formats (\n,\t ...)
-			wb, err := fmt.Fprintf(l.file, "%d\t%s\t%s\t%s\n", l.lastSequence, e.EventType, e.key, e.value)
+			wb, err := fmt.Fprintf(l.file, "%d\t%s\t%s\t%s\n", l.lastSequence, e.EventType, e.Key, e.Value)
 			if err != nil {
+				fmt.Println("4")
 				//Insert err into erros channel and exit
-				errors <- err
-				return
+				errors <- fmt.Errorf("cannot write to log file: %w", err)
+
 			}
 			fmt.Printf("%d bytes written to file: %s \n", wb, l.file.Name())
+
+			l.wg.Done()
 		}
 	}()
 }
@@ -146,20 +172,29 @@ func (l *FileTransactionLogger) ReadTransLog() (<-chan Event, <-chan error) {
 			line := scanner.Text()
 
 			//Read and parse event from line
-			wb, err := fmt.Sscanf(line, "%d\t%s\t%s\t%s", &e.Sequence, &e.EventType, &e.key, &e.value)
+			wb, err := fmt.Sscanf(line, "%d\t%s\t%s\t%s", &e.Sequence, &e.EventType, &e.Key, &e.Value)
 			if err != nil {
+				fmt.Println("3")
 				outError <- fmt.Errorf("parse error reading from log file: %w", err)
 				return
 			}
 			//Only for debug purposes
 			fmt.Printf("%d items parsed correctly\n", wb)
-
+			fmt.Printf("LastSeq: %d eSeq: %d\n", l.lastSequence, e.Sequence)
 			//Check if sequence is in correct order (increasing), else something is wrong with file
 			if l.lastSequence >= e.Sequence {
+				fmt.Println("2")
 				outError <- fmt.Errorf("transaction sequence out of order")
 				return
 			}
+			// uv, err := url.QueryUnescape(e.Value)
+			// if err != nil {
+			// 	fmt.Println("1")
+			// 	outError <- fmt.Errorf("value decoding failure: %w", err)
+			// 	return
+			// }
 
+			// e.Value = uv
 			//Set lastSequence to last readed event sequence number
 			l.lastSequence = e.Sequence
 
@@ -167,6 +202,7 @@ func (l *FileTransactionLogger) ReadTransLog() (<-chan Event, <-chan error) {
 			outEvent <- e
 		}
 		if err := scanner.Err(); err != nil {
+			fmt.Println("7")
 			outError <- fmt.Errorf("transaction log scanner failure: %w", err)
 			return
 		}
@@ -175,18 +211,39 @@ func (l *FileTransactionLogger) ReadTransLog() (<-chan Event, <-chan error) {
 	return outEvent, outError
 }
 
+func (l *FileTransactionLogger) Wait() {
+	l.wg.Wait()
+}
+
+func (l *FileTransactionLogger) Close() error {
+	l.wg.Wait()
+
+	if l.events != nil {
+		close(l.events) // Terminates Run loop and goroutine
+	}
+
+	return l.file.Close()
+}
+
 // Implements TransactionLogger interface for FileTransactionLogger
 
 func (l *FileTransactionLogger) WriteDelete(key string) {
+	//add to the waiting group
+	l.wg.Add(1)
 	// write Delete Event to events channel
-	l.events <- Event{EventType: EventType(EventDelete), key: key}
+	l.events <- Event{EventType: EventType(EventDelete), Key: key}
 }
 func (l *FileTransactionLogger) WritePut(key, value string) {
+	fmt.Println("Start WritePut with key: " + key)
+	//add to the waiting group
+	l.wg.Add(1)
 	//Write Put event to events channel
-	l.events <- Event{EventType: EventType(EventPut), key: key, value: value}
+	l.events <- Event{EventType: EventType(EventPut), Key: key, Value: value}
+	fmt.Println("End WritePut")
 }
 
 // func access erros channel
 func (l *FileTransactionLogger) Err() <-chan error {
+
 	return l.errors
 }

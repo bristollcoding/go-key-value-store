@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -22,6 +23,7 @@ var ErrorNoSuchKey = errors.New("no Such Key")
 
 // Define Put function to add elements to store
 func Put(key, value string) error {
+	fmt.Println("Start Put")
 	// Writing lock
 	store.Lock()
 	//Always unlock on func exit
@@ -29,8 +31,8 @@ func Put(key, value string) error {
 	//Idempotent so no checks for already existing value with given key ( ALWAYS OVERWRITE)
 	store.m[key] = value
 
-	//Write transaction to log file
-	tLogger.WritePut(key, value)
+	fmt.Println("End Put")
+
 	return nil
 }
 
@@ -53,7 +55,5 @@ func Delete(key string) {
 	store.Lock()
 	defer store.Unlock()
 	delete(store.m, key)
-	//Write transaction to log file
-	tLogger.WriteDelete(key)
 
 }
