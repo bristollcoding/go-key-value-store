@@ -4,7 +4,10 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+<<<<<<< HEAD
 	"net/url"
+=======
+>>>>>>> dev
 	"os"
 	"sync"
 )
@@ -136,9 +139,15 @@ func (l *FileTransactionLogger) Start() {
 			l.lastSequence++
 			//Transaction format in file-> [id TransactionType Key Value] each in new line
 			//TODO: handle values with formats (\n,\t ...)
+<<<<<<< HEAD
 			wb, err := fmt.Fprintf(l.file, "%d\t%s\t%s\t%s\n", l.lastSequence, e.EventType, e.Key, url.QueryEscape(e.Value))
 			if err != nil {
 
+=======
+			wb, err := fmt.Fprintf(l.file, "%d\t%s\t%s\t%s\n", l.lastSequence, e.EventType, e.Key, e.Value)
+			if err != nil {
+				fmt.Println("4")
+>>>>>>> dev
 				//Insert err into erros channel and exit
 				errors <- fmt.Errorf("cannot write to log file: %w", err)
 
@@ -175,11 +184,16 @@ func (l *FileTransactionLogger) ReadTransLog() (<-chan Event, <-chan error) {
 			//Read and parse event from line
 			wb, err := fmt.Sscanf(line, "%d\t%s\t%s\t%s", &e.Sequence, &e.EventType, &e.Key, &e.Value)
 			if err != nil {
+<<<<<<< HEAD
+=======
+				fmt.Println("3")
+>>>>>>> dev
 				outError <- fmt.Errorf("parse error reading from log file: %w", err)
 				return
 			}
 			//Only for debug purposes
 			fmt.Printf("%d items parsed correctly\n", wb)
+<<<<<<< HEAD
 			fmt.Printf("Event Value: %s\n", e.Value)
 			fmt.Printf("LastSeq: %d eSeq: %d\n", l.lastSequence, e.Sequence)
 			//Check if sequence is in correct order (increasing), else something is wrong with file
@@ -194,6 +208,23 @@ func (l *FileTransactionLogger) ReadTransLog() (<-chan Event, <-chan error) {
 			}
 
 			e.Value = uv
+=======
+			fmt.Printf("LastSeq: %d eSeq: %d\n", l.lastSequence, e.Sequence)
+			//Check if sequence is in correct order (increasing), else something is wrong with file
+			if l.lastSequence >= e.Sequence {
+				fmt.Println("2")
+				outError <- fmt.Errorf("transaction sequence out of order")
+				return
+			}
+			// uv, err := url.QueryUnescape(e.Value)
+			// if err != nil {
+			// 	fmt.Println("1")
+			// 	outError <- fmt.Errorf("value decoding failure: %w", err)
+			// 	return
+			// }
+
+			// e.Value = uv
+>>>>>>> dev
 			//Set lastSequence to last readed event sequence number
 			l.lastSequence = e.Sequence
 
@@ -201,6 +232,10 @@ func (l *FileTransactionLogger) ReadTransLog() (<-chan Event, <-chan error) {
 			outEvent <- e
 		}
 		if err := scanner.Err(); err != nil {
+<<<<<<< HEAD
+=======
+			fmt.Println("7")
+>>>>>>> dev
 			outError <- fmt.Errorf("transaction log scanner failure: %w", err)
 			return
 		}
